@@ -31,13 +31,22 @@ const ButtonWrapper = styled(ButtonGroup)`
 
 const validatePasswordConfirmation = validPasswordConfirmation('secondPassword')
 
-const validateSecondPassword = (value, allValues, { wallet }) => {
-  return Types.Wallet.isValidSecondPwd(value, wallet) ? null : (
-    <FormattedMessage
-      id='scenes.securitysettings.advanced.secondpasswordwallet.settings.invalidsecondpassword'
-      defaultMessage='Second password invalid'
-    />
-  )
+const validateSecondPassword = (
+  value,
+  allValues,
+  { securityModule, wallet }
+) => {
+  if (
+    Types.Wallet.isDoubleEncrypted(wallet) &&
+    !securityModule.verifySecondPassword(value)
+  ) {
+    return (
+      <FormattedMessage
+        id='scenes.securitysettings.advanced.secondpasswordwallet.settings.invalidsecondpassword'
+        defaultMessage='Second password invalid'
+      />
+    )
+  }
 }
 
 const isMainPassword = (value, allValues, { mainPassword }) =>

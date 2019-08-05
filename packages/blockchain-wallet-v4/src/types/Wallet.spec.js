@@ -1,16 +1,26 @@
 import * as R from 'ramda'
 import { Address, Wallet, AddressMap, serializer } from './index'
-import * as crypto from '../walletCrypto/index'
 
 const walletFixture = require('./__mocks__/wallet.v3')
 const walletFixtureSecpass = require('./__mocks__/wallet.v3-secpass')
-const secpass = 'secret'
+
+const securityModule = {
+  computeSecondPasswordHash: async secondPassword =>
+    `hash of ${JSON.stringify(secondPassword)}`,
+
+  decryptWithSecondPassword: async ({ secondPassword }, ciphertext) =>
+    `decrypted from ${JSON.stringify([{ ciphertext, secondPassword }])}`,
+
+  encryptWithSecondPassword: async ({ secondPassword }, plaintext) =>
+    `encrypted with ${JSON.stringify({
+      secondPassword,
+      plaintext
+    })}`
+}
 
 describe('Wallet', () => {
   const wallet = Wallet.fromJS(walletFixture)
   const walletSecpass = Wallet.fromJS(walletFixtureSecpass)
-
-  crypto.encryptDataWithKey = (data, key, iv) => (data ? `enc<${data}>` : null)
 
   describe('toJS', () => {
     it('should return the correct object', () => {
@@ -63,7 +73,7 @@ describe('Wallet', () => {
         0,
         undefined,
         undefined,
-        {}
+        { securityModule }
       ).fork(
         failure => expect(failure).toEqual(undefined),
         withNewAddress => {
@@ -116,52 +126,44 @@ describe('Wallet', () => {
     })
   })
 
-  describe('isValidSecondPwd', () => {
-    it('should be valid for an unencrypted wallet', () => {
-      let isValid = Wallet.isValidSecondPwd(null, wallet)
-      expect(isValid).toEqual(true)
-    })
-
-    it('should detect a valid second password', () => {
-      let isValid = Wallet.isValidSecondPwd(secpass, walletSecpass)
-      expect(isValid).toEqual(true)
-    })
-
-    it('should detect an invalid second password', () => {
-      let secpass = 'wrong_secpass'
-      let isValid = Wallet.isValidSecondPwd(secpass, walletSecpass)
-      expect(isValid).toEqual(false)
-    })
-  })
-
   describe('encrypt', () => {
     it('should encrypt', done => {
-      Wallet.encrypt('secret', wallet).fork(done, encrypted => {
-        let [before, after] = [wallet, encrypted].map(Wallet.selectAddresses)
-        let enc = crypto.encryptDataWithKey
-        let success = R.zip(before, after).every(
-          ([b, a]) => enc(b.priv) === a.priv
-        )
-        expect(success).toEqual(true)
-        done()
-      })
+      Wallet.encrypt(securityModule, 'second password', wallet).fork(
+        done,
+        encrypted => {
+          expect(encrypted).toMatchSnapshot()
+          done()
+        }
+      )
     })
   })
 
   describe('decrypt', () => {
     it('should decrypt', done => {
-      Wallet.decrypt('secret', walletSecpass).fork(done, decrypted => {
-        expect(Wallet.toJS(decrypted)).toEqual(walletFixture)
-        done()
-      })
+      Wallet.decrypt(securityModule, 'second password', walletSecpass).fork(
+        done,
+        decrypted => {
+          expect(decrypted).toMatchSnapshot()
+          done()
+        }
+      )
     })
 
     it('should fail when given an incorrect password', done => {
-      Wallet.decrypt('wrong', walletSecpass).fork(error => {
-        expect(R.is(Error, error)).toEqual(true)
-        expect(error.message).toEqual('INVALID_SECOND_PASSWORD')
-        done()
-      }, done)
+      const securityModule = {
+        decryptWithSecondPassword: async ({ secondPassword }, cipherText) => {
+          throw new Error('INVALID_SECOND_PASSWORD')
+        }
+      }
+
+      Wallet.decrypt(securityModule, `incorrect password`, walletSecpass).fork(
+        error => {
+          expect(R.is(Error, error)).toEqual(true)
+          expect(error.message).toEqual('INVALID_SECOND_PASSWORD')
+          done()
+        },
+        done
+      )
     })
   })
 

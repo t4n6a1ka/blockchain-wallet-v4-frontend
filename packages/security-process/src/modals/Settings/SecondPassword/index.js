@@ -1,10 +1,10 @@
 import React from 'react'
 import { connect } from 'react-redux'
 import { bindActionCreators, compose } from 'redux'
-import { actions, selectors } from 'data'
+import { actions } from 'data'
 import modalEnhancer from 'providers/ModalEnhancer'
+import SecurityModuleContext from 'providers/SecurityModule'
 import SecondPassword from './template.js'
-import { Types } from 'blockchain-wallet-v4'
 import * as C from 'services/AlertService'
 
 class SecondPasswordContainer extends React.PureComponent {
@@ -16,12 +16,7 @@ class SecondPasswordContainer extends React.PureComponent {
   }
 
   handleClick () {
-    if (
-      Types.Wallet.isValidSecondPwd(
-        this.state.secondPassword,
-        this.props.wallet
-      )
-    ) {
+    if (this.context.verifySecondPassword(this.state.secondPassword)) {
       this.props.walletActions.submitSecondPassword(this.state.secondPassword)
       this.props.modalActions.closeModal()
     } else {
@@ -45,9 +40,8 @@ class SecondPasswordContainer extends React.PureComponent {
     )
   }
 }
-const mapStateToProps = state => ({
-  wallet: selectors.core.wallet.getWallet(state)
-})
+
+SecondPasswordContainer.contextType = SecurityModuleContext
 
 const mapDispatchToProps = dispatch => ({
   alertActions: bindActionCreators(actions.alerts, dispatch),
@@ -58,7 +52,7 @@ const mapDispatchToProps = dispatch => ({
 const enhance = compose(
   modalEnhancer('SecondPassword'),
   connect(
-    mapStateToProps,
+    null,
     mapDispatchToProps
   )
 )

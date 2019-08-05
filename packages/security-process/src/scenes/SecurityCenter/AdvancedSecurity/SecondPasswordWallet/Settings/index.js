@@ -4,6 +4,7 @@ import { bindActionCreators } from 'redux'
 import { formValueSelector } from 'redux-form'
 
 import { actions, selectors } from 'data'
+import SecurityModuleContext from 'providers/SecurityModule'
 import Settings from './template'
 
 class SettingsContainer extends React.PureComponent {
@@ -38,10 +39,13 @@ class SettingsContainer extends React.PureComponent {
           this.props.formActions.reset('settingSecondPassword')
           this.handleToggle()
         }}
+        securityModule={this.context}
       />
     )
   }
 }
+
+SettingsContainer.contextType = SecurityModuleContext
 
 const mapStateToProps = state => ({
   mainPassword: selectors.core.wallet.getMainPassword(state),

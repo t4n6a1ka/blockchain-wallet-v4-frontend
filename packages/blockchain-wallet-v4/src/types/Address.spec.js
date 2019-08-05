@@ -32,7 +32,15 @@ describe('Address', () => {
 
   describe('encrypt', () => {
     it('should return an encrypted Address', done => {
-      Address.encrypt(1, null, 'secret', address).fork(done, enc => {
+      const mockSecurityModule = {
+        encryptWithSecondPassword: async ({ secondPassword }, plaintext) =>
+          `encrypted with ${JSON.stringify({
+            secondPassword,
+            plaintext
+          })}`
+      }
+
+      Address.encrypt(mockSecurityModule, 'secret', address).fork(done, enc => {
         expect(enc.priv).not.toEqual(addressFixture.priv)
         done()
       })

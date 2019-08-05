@@ -1,6 +1,8 @@
 import BigNumber from 'bignumber.js'
 import EthereumTx from 'ethereumjs-tx'
 import EthereumAbi from 'ethereumjs-abi'
+
+import { returnTask } from '../utils/functional'
 import * as eth from '../utils/eth'
 import Task from 'data.task'
 import { curry } from 'ramda'
@@ -12,32 +14,33 @@ const toHex = value => {
   return isOdd(hex) ? `0x0${hex}` : `0x${hex}`
 }
 
-// TODO: ERC20 send contract address to method, figure out fees
-export const signErc20 = curry((network = 1, mnemonic, data) => {
-  const { index, to, amount, nonce, gasPrice, gasLimit } = data
-  const privateKey = eth.getPrivateKey(mnemonic, index)
-  const transferMethodHex = '0xa9059cbb'
-  const txParams = {
-    to: '0x8e870d67f660d95d5be530380d0ec0bd388289e1', // contract address
-    nonce: toHex(nonce),
-    gasPrice: toHex(gasPrice),
-    gasLimit: toHex(gasLimit),
-    value: toHex(0),
-    chainId: network,
-    data:
-      transferMethodHex +
-      EthereumAbi.rawEncode(['address'], [to]).toString('hex') +
-      EthereumAbi.rawEncode(['uint256'], [amount]).toString('hex')
+export const signErc20 = curry(
+  (network = 1, securityModule, data, contractAddress) => {
+    const { index, to, amount, nonce, gasPrice, gasLimit } = data
+    const privateKey = eth.getPrivateKey(securityModule, index)
+    const transferMethodHex = '0xa9059cbb'
+    const txParams = {
+      to: contractAddress,
+      nonce: toHex(nonce),
+      gasPrice: toHex(gasPrice),
+      gasLimit: toHex(gasLimit),
+      value: toHex(0),
+      chainId: network,
+      data:
+        transferMethodHex +
+        EthereumAbi.rawEncode(['address'], [to]).toString('hex') +
+        EthereumAbi.rawEncode(['uint256'], [amount]).toString('hex')
+    }
+    const tx = new EthereumTx(txParams)
+    tx.sign(privateKey)
+    const rawTx = '0x' + tx.serialize().toString('hex')
+    return Task.of(rawTx)
   }
-  const tx = new EthereumTx(txParams)
-  tx.sign(privateKey)
-  const rawTx = '0x' + tx.serialize().toString('hex')
-  return Task.of(rawTx)
-})
+)
 
-export const sign = curry((network = 1, mnemonic, data) => {
+export const sign = curry((network = 1, securityModule, data) => {
   const { index, to, amount, nonce, gasPrice, gasLimit } = data
-  const privateKey = eth.getPrivateKey(mnemonic, index)
+  const privateKey = eth.getPrivateKey(securityModule, index)
   const txParams = {
     to,
     nonce: toHex(nonce),
@@ -94,20 +97,25 @@ export const serialize = (network, raw, signature) => {
   return '0x' + tx.serialize().toString('hex')
 }
 
-export const signLegacy = curry((network = 1, seedHex, data) => {
-  const { index, to, amount, nonce, gasPrice, gasLimit } = data
-  const privateKey = eth.getLegacyPrivateKey(seedHex, index)
-  const txParams = {
-    to,
-    nonce: toHex(nonce),
-    gasPrice: toHex(gasPrice),
-    gasLimit: toHex(gasLimit),
-    value: toHex(amount),
-    chainId: network || 1
-  }
+export const signLegacy = curry(
+  returnTask(async (network = 1, securityModule, secondPassword, data) => {
+    const { to, amount, nonce, gasPrice, gasLimit } = data
 
-  const tx = new EthereumTx(txParams)
-  tx.sign(privateKey)
-  const rawTx = '0x' + tx.serialize().toString('hex')
-  return Task.of(rawTx)
-})
+    const privateKey = await securityModule.deriveLegacyEthereumKey({
+      secondPassword
+    })
+
+    const txParams = {
+      to,
+      nonce: toHex(nonce),
+      gasPrice: toHex(gasPrice),
+      gasLimit: toHex(gasLimit),
+      value: toHex(amount),
+      chainId: network || 1
+    }
+
+    const tx = new EthereumTx(txParams)
+    tx.sign(privateKey)
+    return '0x' + tx.serialize().toString('hex')
+  })
+)

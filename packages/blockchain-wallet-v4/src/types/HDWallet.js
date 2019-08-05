@@ -3,12 +3,12 @@ import { pipe, compose, curry, is, range, map } from 'ramda'
 import { view, over, traverseOf, traversed } from 'ramda-lens'
 import Bitcoin from 'bitcoinjs-lib'
 import BIP39 from 'bip39'
-import * as crypto from '../walletCrypto'
 import Task from 'data.task'
 
 import Type from './Type'
 import * as HDAccountList from './HDAccountList'
 import * as HDAccount from './HDAccount'
+import { returnTask } from '../utils/functional'
 
 /* HDWallet :: {
   seed_hex :: String
@@ -24,7 +24,6 @@ export const accounts = HDWallet.define('accounts')
 export const defaultAccountIdx = HDWallet.define('default_account_idx')
 export const mnemonicVerified = HDWallet.define('mnemonic_verified')
 
-export const selectSeedHex = view(seedHex)
 export const selectAccounts = view(accounts)
 export const selectDefaultAccountIdx = view(defaultAccountIdx)
 export const selectMnemonicVerified = compose(
@@ -84,10 +83,24 @@ export const deriveAccountNodeAtIndex = (seedHex, index, network) => {
     .deriveHardened(index)
 }
 
-export const generateAccount = curry((index, label, network, seedHex) => {
-  let node = deriveAccountNodeAtIndex(seedHex, index, network)
+export const generateAccount = async (
+  { deriveBIP32Key },
+  secondPassword,
+  index,
+  label,
+  network
+) => {
+  const key = await deriveBIP32Key(
+    {
+      network,
+      secondPassword
+    },
+    `m/44'/0'/${index}'`
+  )
+
+  const node = Bitcoin.HDNode.fromBase58(key)
   return HDAccount.fromJS(HDAccount.js(label, node, null))
-})
+}
 
 // encrypt :: Number -> String -> String -> HDWallet -> Task Error HDWallet
 export const encrypt = curry((iterations, sharedKey, password, hdWallet) => {

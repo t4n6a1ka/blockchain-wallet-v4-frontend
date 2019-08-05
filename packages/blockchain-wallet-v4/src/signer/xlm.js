@@ -2,8 +2,8 @@ import { getKeyPair } from '../utils/xlm'
 import * as StellarSdk from 'stellar-sdk'
 import Str from '@ledgerhq/hw-app-str'
 
-export const sign = ({ transaction }, mnemonic) => {
-  const keyPair = getKeyPair(mnemonic)
+export const sign = ({ transaction }, securityModule) => {
+  const keyPair = getKeyPair(securityModule)
   transaction.sign(keyPair)
   return transaction
 }

@@ -14,7 +14,8 @@ import {
   values
 } from 'ramda'
 import { view, over, traverseOf } from 'ramda-lens'
-import * as crypto from '../walletCrypto'
+
+import { returnTask } from '../utils/functional'
 import Task from 'data.task'
 import Type from './Type'
 import * as AddressLabelMap from './AddressLabelMap'
@@ -133,14 +134,18 @@ export const js = (label, node, xpub) => ({
   cache: node ? Cache.js(node, null) : Cache.js(null, xpub)
 })
 
-// encrypt :: Number -> String -> String -> Account -> Task Error Account
-export const encrypt = curry((iterations, sharedKey, password, account) => {
-  const cipher = crypto.encryptSecPass(sharedKey, iterations, password)
+export const encrypt = curry((securityModule, secondPassword, account) => {
+  const cipher = curry(returnTask(securityModule.encryptWithSecondPassword))({
+    secondPassword
+  })
+
   return traverseOf(xpriv, Task.of, cipher, account)
 })
 
-// decrypt :: Number -> String -> String -> Account -> Task Error Account
-export const decrypt = curry((iterations, sharedKey, password, account) => {
-  const cipher = crypto.decryptSecPass(sharedKey, iterations, password)
+export const decrypt = curry((securityModule, secondPassword, account) => {
+  const cipher = curry(returnTask(securityModule.decryptWithSecondPassword))({
+    secondPassword
+  })
+
   return traverseOf(xpriv, Task.of, cipher, account)
 })

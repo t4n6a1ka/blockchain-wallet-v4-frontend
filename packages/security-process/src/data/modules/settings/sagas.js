@@ -1,15 +1,13 @@
+import BIP39 from 'bip39'
+import { view } from 'ramda-lens'
 import { put, call, select } from 'redux-saga/effects'
 import profileSagas from 'data/modules/profile/sagas'
-import * as actions from '../../actions.js'
-import * as selectors from '../../selectors.js'
+import * as actions from '../../actions'
+import * as selectors from '../../selectors'
 import * as C from 'services/AlertService'
-import { addLanguageToUrl } from 'services/LanguageService'
-import {
-  askSecondPasswordEnhancer,
-  promptForSecondPassword
-} from 'services/SagaService'
-import { Types, utils } from 'blockchain-wallet-v4/src'
-import { contains, toLower, prop, propEq, head } from 'ramda'
+import { askSecondPasswordEnhancer } from 'services/SagaService'
+import { Types } from 'blockchain-wallet-v4/src'
+import { contains, toLower, pipe, prop, propEq, head } from 'ramda'
 
 export const taskToPromise = t =>
   new Promise((resolve, reject) => t.fork(reject, resolve))
@@ -19,7 +17,7 @@ export const ipRestrictionError =
 
 export const logLocation = 'modules/settings/sagas'
 
-export default ({ api, coreSagas }) => {
+export default ({ api, coreSagas, securityModule }) => {
   const { syncUserWithWallet } = profileSagas({
     api,
     coreSagas
@@ -45,11 +43,23 @@ export default ({ api, coreSagas }) => {
     }
   }
 
+  const getSeedHex = pipe(
+    selectors.core.wallet.getDefaultHDWallet,
+    view(Types.HDWallet.seedHex)
+  )
+
+  const getSeedEntropy = function * (secondPassword) {
+    const seedHex = yield select(getSeedHex)
+
+    return secondPassword
+      ? securityModule.decryptWithSecondPassword({ secondPassword }, seedHex)
+      : seedHex
+  }
+
   const recoverySaga = function * ({ password }) {
-    const getMnemonic = s => selectors.core.wallet.getMnemonic(s, password)
     try {
-      const mnemonicT = yield select(getMnemonic)
-      const mnemonic = yield call(() => taskToPromise(mnemonicT))
+      const entropy = yield call(getSeedEntropy, password)
+      const mnemonic = BIP39.entropyToMnemonic(entropy)
       const mnemonicArray = mnemonic.split(' ')
       yield put(
         actions.modules.settings.addMnemonic({ mnemonic: mnemonicArray })
@@ -134,17 +144,6 @@ export default ({ api, coreSagas }) => {
       if (propEq('type', 'UNKNOWN_USER', e)) return
       yield put(actions.alerts.displayError(C.MOBILE_VERIFY_ERROR))
       yield put(actions.modules.settings.verifyMobileFailure())
-    }
-  }
-
-  // We prefer local storage language and update this in background for
-  // things like emails and external communication with the user
-  const updateLanguage = function * (action) {
-    try {
-      yield call(coreSagas.settings.setLanguage, action.payload)
-      addLanguageToUrl(action.payload.language)
-    } catch (e) {
-      yield put(actions.logs.logErrorMessage(logLocation, 'updateLanguage', e))
     }
   }
 
@@ -307,65 +306,6 @@ export default ({ api, coreSagas }) => {
     yield put(actions.modals.closeModal())
   }
 
-  const showBtcPrivateKey = function * (action) {
-    const { addr } = action.payload
-    const password = yield call(promptForSecondPassword)
-    const wallet = yield select(selectors.core.wallet.getWallet)
-    try {
-      const privT = Types.Wallet.getPrivateKeyForAddress(wallet, password, addr)
-      const priv = yield call(() => taskToPromise(privT))
-      yield put(actions.modules.settings.addShownBtcPrivateKey(priv))
-    } catch (e) {
-      yield put(
-        actions.logs.logErrorMessage(logLocation, 'showBtcPrivateKey', e)
-      )
-    }
-  }
-
-  const showEthPrivateKey = function * (action) {
-    const { isLegacy } = action.payload
-    try {
-      const password = yield call(promptForSecondPassword)
-      if (isLegacy) {
-        const getSeedHex = state =>
-          selectors.core.wallet.getSeedHex(state, password)
-        const seedHexT = yield select(getSeedHex)
-        const seedHex = yield call(() => taskToPromise(seedHexT))
-        const legPriv = utils.eth.getLegacyPrivateKey(seedHex).toString('hex')
-        yield put(actions.modules.settings.addShownEthPrivateKey(legPriv))
-      } else {
-        const getMnemonic = state =>
-          selectors.core.wallet.getMnemonic(state, password)
-        const mnemonicT = yield select(getMnemonic)
-        const mnemonic = yield call(() => taskToPromise(mnemonicT))
-        let priv = utils.eth.getPrivateKey(mnemonic, 0).toString('hex')
-        yield put(actions.modules.settings.addShownEthPrivateKey(priv))
-      }
-    } catch (e) {
-      yield put(
-        actions.logs.logErrorMessage(logLocation, 'showEthPrivateKey', e)
-      )
-    }
-  }
-
-  const showXlmPrivateKey = function * () {
-    try {
-      const password = yield call(promptForSecondPassword)
-      const getMnemonic = state =>
-        selectors.core.wallet.getMnemonic(state, password)
-      const mnemonicT = yield select(getMnemonic)
-      const mnemonic = yield call(() => taskToPromise(mnemonicT))
-      const keyPair = utils.xlm.getKeyPair(mnemonic)
-      yield put(
-        actions.modules.settings.addShownXlmPrivateKey(keyPair.secret())
-      )
-    } catch (e) {
-      yield put(
-        actions.logs.logErrorMessage(logLocation, 'showXlmPrivateKey', e)
-      )
-    }
-  }
-
   return {
     initSettingsInfo,
     initSettingsPreferences,
@@ -374,7 +314,6 @@ export default ({ api, coreSagas }) => {
     updateMobile,
     resendMobile,
     verifyMobile,
-    updateLanguage,
     updateCurrency,
     updateAutoLogout,
     updateLoggingLevel,
@@ -387,9 +326,6 @@ export default ({ api, coreSagas }) => {
     enableTwoStepGoogleAuthenticator,
     enableTwoStepYubikey,
     newHDAccount,
-    recoverySaga,
-    showBtcPrivateKey,
-    showEthPrivateKey,
-    showXlmPrivateKey
+    recoverySaga
   }
 }

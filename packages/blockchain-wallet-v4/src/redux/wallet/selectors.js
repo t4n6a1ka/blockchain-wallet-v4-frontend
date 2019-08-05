@@ -91,18 +91,6 @@ export const getHDAccounts = compose(
   Wallet.selectHDAccounts,
   getWallet
 )
-export const getSeedHex = curry((state, password) =>
-  compose(
-    Wallet.getSeedHex(password),
-    getWallet
-  )(state)
-)
-export const getMnemonic = curry((state, password) =>
-  compose(
-    Wallet.getMnemonic(password),
-    getWallet
-  )(state)
-)
 export const getDefaultAccount = compose(
   HDWallet.selectDefaultAccount,
   getDefaultHDWallet

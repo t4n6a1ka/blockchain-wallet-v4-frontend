@@ -4,38 +4,29 @@ import { AppContainer } from 'react-hot-loader'
 
 import './favicons'
 import configureStore from 'store'
-import configureLocales from 'services/LocalesService'
+
 import App from 'scenes/app.js'
 import Error from './index.error'
 
-const renderApp = (Component, store, history, persistor) => {
-  const { messages } = configureLocales(store)
-
-  const render = (Component, store, history, messages, persistor) => {
+const renderApp = (Component, root) => {
+  const render = (Component, { securityModule, store, history }) => {
     ReactDOM.render(
       <AppContainer key={Math.random()} warnings={false}>
         <Component
+          securityModule={securityModule}
           store={store}
           history={history}
-          messages={messages}
-          persistor={persistor}
         />
       </AppContainer>,
       document.getElementById('app')
     )
   }
 
-  render(App, store, history, messages, persistor)
+  render(App, root)
 
   if (module.hot) {
     module.hot.accept('./scenes/app.js', () =>
-      render(
-        require('./scenes/app.js').default,
-        store,
-        history,
-        messages,
-        persistor
-      )
+      render(require('./scenes/app.js').default, root)
     )
   }
 }
@@ -48,7 +39,7 @@ const renderError = e => {
 
 configureStore()
   .then(root => {
-    renderApp(App, root.store, root.history, root.persistor)
+    renderApp(App, root)
   })
   .catch(e => {
     renderError(e)
